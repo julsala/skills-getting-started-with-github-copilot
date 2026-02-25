@@ -4,14 +4,43 @@ document.addEventListener("DOMContentLoaded", () => {
   const signupForm = document.getElementById("signup-form");
   const messageDiv = document.getElementById("message");
 
+  // Function to remove a participant by calling backend
+  async function removeParticipant(activity, email) {
+    try {
+      const response = await fetch(
+        `/activities/${encodeURIComponent(activity)}/participants?email=${encodeURIComponent(email)}`,
+        { method: "DELETE" }
+      );
+
+      const result = await response.json();
+
+      if (response.ok) {
+        messageDiv.textContent = result.message;
+        messageDiv.className = "success";
+        fetchActivities(); // refresh list
+      } else {
+        messageDiv.textContent = result.detail || "Unable to remove participant";
+        messageDiv.className = "error";
+      }
+      messageDiv.classList.remove("hidden");
+      setTimeout(() => messageDiv.classList.add("hidden"), 5000);
+    } catch (err) {
+      messageDiv.textContent = "Failed to unregister. Please try again.";
+      messageDiv.className = "error";
+      messageDiv.classList.remove("hidden");
+      console.error("Error removing participant:", err);
+    }
+  }
+
   // Function to fetch activities from API
   async function fetchActivities() {
     try {
       const response = await fetch("/activities");
       const activities = await response.json();
 
-      // Clear loading message
+      // Clear loading message and dropdown options
       activitiesList.innerHTML = "";
+      activitySelect.innerHTML = `<option value="">-- Select an activity --</option>`;
 
       // Populate activities list
       Object.entries(activities).forEach(([name, details]) => {
@@ -25,6 +54,24 @@ document.addEventListener("DOMContentLoaded", () => {
           <p>${details.description}</p>
           <p><strong>Schedule:</strong> ${details.schedule}</p>
           <p><strong>Availability:</strong> ${spotsLeft} spots left</p>
+
+        ${details.participants.length > 0 ? `
+          <div class="participants">
+            <p><strong>Participants:</strong></p>
+            <ul>
+              ${details.participants.map(p => `
+                <li>
+                  ${p}
+                  <span class="delete-icon" data-activity="${encodeURIComponent(name)}" data-email="${encodeURIComponent(p)}">&times;</span>
+                </li>
+              `).join('')}
+            </ul>
+          </div>
+        ` : `
+          <div class="participants">
+            <p><strong>Participants:</strong> <em>None yet</em></p>
+          </div>
+        `}
         `;
 
         activitiesList.appendChild(activityCard);
@@ -34,6 +81,15 @@ document.addEventListener("DOMContentLoaded", () => {
         option.value = name;
         option.textContent = name;
         activitySelect.appendChild(option);
+
+        // attach listeners for delete icons within this card
+        activityCard.querySelectorAll('.delete-icon').forEach(icon => {
+          icon.addEventListener('click', () => {
+            const act = decodeURIComponent(icon.dataset.activity);
+            const email = decodeURIComponent(icon.dataset.email);
+            removeParticipant(act, email);
+          });
+        });
       });
     } catch (error) {
       activitiesList.innerHTML = "<p>Failed to load activities. Please try again later.</p>";
